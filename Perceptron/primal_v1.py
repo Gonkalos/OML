@@ -2,7 +2,7 @@ import pandas as pd
 
 dtypes = {'col1': 'float', 'col2': 'float', 'col3': 'int'}
 
-df = pd.read_csv('/Users/goncalo/Documents/University/OML/Class 1/data1.csv',  sep = ' ', header = None, dtype = dtypes)
+df = pd.read_csv('/Users/goncalo/Documents/University/OML/Perceptron/Data/data1.csv',  sep = ' ', header = None, dtype = dtypes)
 
 N = df.shape[0]
 x = df.iloc[:, [0, 1]].values.tolist()
@@ -52,7 +52,7 @@ def showStats(t, w, error):
     print('---')
 
 
-# Perceptron algorithm v1 (primal)
+# Perceptron algorithm
 def perceptron():
     w = [-0.25] * (N - 1)
     t = 0
