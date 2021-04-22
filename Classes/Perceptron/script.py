@@ -1,3 +1,7 @@
+'''
+Perceptron Primal V1
+'''
+
 import pandas as pd
 
 dtypes = {'col1': 'float', 'col2': 'float', 'col3': 'int'}
