@@ -1,7 +1,6 @@
 import numpy as np
-import csv
-from random import randint
-
+import matplotlib.pyplot as plt
+from random import randint, random
 from numpy.core.fromnumeric import diagonal
 
 '''
@@ -28,100 +27,191 @@ def load_data(filename):
 Sigmoid function
 '''
 def sigmoid(s):  
-    large = 30
-    if s < -large: 
-        s = -large
-    if s > large: 
-        s = large
+    large=30
+    if s<-large: s=-large
+    if s>large: s=large
     return (1 / (1 + np.exp(-s)))
 
 '''
-Cost funtion
+Cost/Loss funtion
 '''
-def cost(X, Y, N, ew, b, ev, c):
+def cost(X, Y, N, W, b, v, c):
+    epsi = 1.e-12
     sum = 0
     for n in range(N):
-        prediction = predict(X[n], ew, b)
+        prediction = predict(X[n], J, W, b, v, c)
+        # verify if the value of the prediction is in [1e-12, 1-1e-12]
+        if prediction < epsi: 
+            prediction = epsi
+        if prediction > 1 - epsi:
+            prediction = 1 - epsi
         sum += Y[n] * np.log(prediction) + (1 - Y[n]) * np.log(1 - prediction)
     E = - sum / N
     return E
 
 '''
-Predict label
+Calculate h
 '''
-def predict(x, ew, b):
-    w = ew[1:]
-    s = b + np.dot(x, w)
-    sigma = sigmoid(s)
-    return sigma
+def get_h(x, W, b):
+    # x, W, b -> b + W * x -> s
+    s = b + np.dot(W, x)
+    # s -> s.map(sigmoid) -> h
+    func = lambda a: sigmoid(a)
+    h = np.array([func(s_j) for s_j in s])
+    return h
 
 '''
+Predict label
 '''
-def update(X, Y, I, m, eta, eh, ew, b, ev, c):
-    prediction = predict(X[m], ew, b)
-    # auxiliar matrices
-    h = eh[1:]
-    w = ew[1:]
-    v = ev[1:]
-    func1 = lambda a: a * (1 - a)
-    diagonal = np.array([func1(h_m) for h_m in h])
+def predict(x, J, W, b, v, c):
+    h = get_h(x, W, b)
+    # c, v, h -> c + v.T * h -> z
+    sum = 0
+    for j in range(J):
+        sum += v[j] * h[j]
+    z = c + sum
+    # prediction
+    y = sigmoid(z)
+    return y
+
+'''
+Calculate the gradients for W, b, v, c
+'''
+def gradient(x, y, v, h, prediction):
+    func = lambda a: a * (1 - a)
+    diagonal = np.array([func(h_m) for h_m in h])
     matrix1 = np.diag(diagonal) # J x J
-    matrix2 = np.tile(X, (I, 1))        
-    matrix2 = matrix2 * v # J x I
-    # update w
-    grad_w = (prediction - Y[m]) * np.matmul(matrix1, matrix2) # w's gradient
-    w = w - eta * grad_w                                       # w (t + 1)
-    # update b
-    grad_b = (prediction - Y[m]) * (matrix1 * v) # b's gradient
-    b = b - eta * grad_b                         # b (t + 1)
-    # update v
-    grad_v = (prediction - Y[m]) * h # v's gradient
-    v = v - eta * grad_v             # v (t + 1)
-    # update c
-    grad_c = prediction - Y[m] # c's gradient
-    c = c - eta * grad_c       # c (t + 1)
-    return w, b, v, c
+    matrix2 = np.tile(x, (J, 1))    
+    matrix2 = np.transpose(matrix2) * v
+    matrix2 = np.transpose(matrix2) # J x I
+    delta = prediction - y
+    Gw = delta * np.matmul(matrix1, matrix2) # W's gradient
+    Gb = delta * np.dot(matrix1, v)          # b's gradient
+    Gv = delta * h                           # v's gradient
+    Gc = delta                               # c's gradient
+    return Gw, Gb, Gv, Gc
+
+'''
+Update W, b, v, c
+'''
+def update(x, y, J, eta, W, b, v, c): 
+    # calculate the gradients
+    h = get_h(x, W, b) 
+    prediction = predict(x, J, W, b, v, c)
+    Gw, Gb, Gv, Gc = gradient(x, y, v, h, prediction)
+    # update the first layer
+    W = W - (eta * Gw) # W (t + 1)
+    b = b - (eta * Gb) # b (t + 1)
+    # update the second layer
+    v = v - (eta * Gv) # v (t + 1)
+    c = c - (eta * Gc) # c (t + 1)
+    return W, b, v, c
 
 '''
 Run shallow logistic classifier
 '''
-def run_slc(X, Y, N, I, eta, max_iteration, eh, ew, b, ev, c, errors):
-    epsi = 10e-3
-    epoch = 0
+def run_slc(X, Y, N, J, subloop, eta, max_iteration, W, b, v, c, errors):
+    #epsi = 10e-3
+    epsi = 0
+    iteration = 0
     while (errors[-1] > epsi):
-        epoch += 1
-        if (epoch > max_iteration):
-            break
-        # choose random data from dataset
-        m = randint(0, N - 1)
-        # update w, b, v, c from (t) to (t + 1)
-        w, b, v, c = update(X, Y, I, m, eta, eh, ew, b, ev, c)
-        error = cost(X, Y, N, ew, b, ev, c)
+        for j in range(subloop):
+            # choose random data from dataset
+            m = randint(0, N - 1)
+            x = X[m]
+            y = Y[m]
+            # update w, b, v, c from (t) to (t + 1)
+            W, b, v, c = update(x, y, J, eta, W, b, v, c)
+            # calculate error
+        error = cost(X, Y, N, W, b, v, c)
         errors.append(error)
-    return w, b, v, c, errors
-        
+        print('number of iterations = %d, cost = %f, eta = %e\r' %(iteration, errors[-1], eta), end='')
+        iteration += subloop
+        if (iteration > max_iteration):
+            break
+    return W, b, v, c, errors
+
+'''
+Show training errors
+'''
+def plot_error(err):
+    plt.plot(range(len(err)), err, marker='o')
+    plt.xlabel('Iterations')
+    plt.ylabel('Number of misclassifications')
+    plt.ylim([0,5])
+    plt.show()
+    return 
+
+'''
+Calculate confusion matrix
+'''
+def confusion(Xeval, Yeval, N, J, W, b, v, c):
+    C = np.zeros([2,2])
+    for n in range(N):
+        y = predict(Xeval[n], J, W, b, v, c)
+        if (y < 0.5 and Yeval[n] < 0.5): C[0,0] = C[0,0] + 1
+        if (y > 0.5 and Yeval[n] > 0.5): C[1,1] = C[1,1] + 1
+        if (y < 0.5 and Yeval[n] > 0.5): C[1,0] = C[1,0] + 1
+        if (y > 0.5 and Yeval[n] < 0.5): C[0,1] = C[0,1] + 1
+    return C
+       
 '''
 Main execution
 '''
 
 # load data from dataset
-N, n_row, n_col,data = load_data('./Data/XOR.txt')
-N = int(N * 1.0)
+#dataset = './Data/XOR.txt'           
+dataset = './Data/line600.txt'       # almost linearly separable (J = 3)
+#dataset = './Data/rectangle600.txt'  # it's harder to separate linearly (J = 9)
+#dataset = './Data/square_circle.txt' # linearly separable (J = 1)
+N, n_row, n_col, data = load_data(dataset)
 I = n_row * n_col
-X = data[:N, :-1] 
-Y = data[:N, -1]
+
+# shuffle dataset
+np.random.shuffle(data)
+
+# split data into training and testing sets
+N_train = int(N * 0.8) 
+X_train = data[:N_train, :-1]
+Y_train = data[:N_train, -1]
+N_test = N - N_train
+X_test = data[N_train:N, :-1]
+Y_test = data[N_train:N, -1]
+
+# replace labels -1 with 0
+np.place(Y_train, Y_train != 1, [0])
+np.place(Y_test, Y_test != 1, [0])
 
 J = 3 # number of neurons in the hidden layer
 
-# initialize w, b, v, c
-ew = np.ones([I + 1]) # w + bias
-b = 1
-ev = np.ones([J + 1]) # v + bias
-c = 1
-eh = np.ones([J + 1]) # hidden layer's weigths
+# initialize w, b, v and c with random values
+W = np.random.randn(J, I)
+b = np.random.randn(J)
+v = np.random.rand(J)
+c = np.random.rand(1)
 
-eta = 0.1 # learning rate
+eta = 1 # learning rate
+
+Nbiter = 2000 # number of iterations
+subloop = 100 # only calculate the cost in each subloop iterations
 
 # initialize errors' list
 errors = []
-errors.append(cost(X, Y, N, ew, b, ev, c))
+errors.append(cost(X_train, Y_train, N_train, W, b, v, c))
+
+W, b, v, c, errors = run_slc(X_train, Y_train, N_train, J, subloop, eta, Nbiter, W, b, v, c, errors); print('\n'); eta = 0.8 * eta
+W, b, v, c, errors = run_slc(X_train, Y_train, N_train, J, subloop, eta, Nbiter, W, b, v, c, errors); print('\n'); eta = 0.7 * eta
+W, b, v, c, errors = run_slc(X_train, Y_train, N_train, J, subloop, eta, Nbiter, W, b, v, c, errors); print('\n'); eta = 0.6 * eta
+W, b, v, c, errors = run_slc(X_train, Y_train, N_train, J, subloop, eta, Nbiter, W, b, v, c, errors); print('\n')
+
+plot_error(errors)
+
+# show results for training set
+print('in-samples error = %f ' % (cost(X_train, Y_train, N_train, W, b, v, c)))
+C = confusion(X_train, Y_train, N_train, J, W, b, v, c)
+print(C)
+
+# show results for testing set
+print('out-samples error=%f' % (cost(X_test, Y_test, N_test, W, b, v, c)))
+C = confusion(X_test, Y_test, N_test, J, W, b, v, c)
+print(C)
